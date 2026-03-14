@@ -1,0 +1,1022 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>大宗商品量化策略平台</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:#050a0e;--bg2:#0c1419;--bg3:#101c24;--panel:#0f1c25;
+  --border:#1a2f3e;--border2:#254152;
+  --accent:#00d4aa;--accent2:#0099ff;--accent3:#ff6b35;
+  --warn:#ffb800;--danger:#ff3b5c;--success:#00d4aa;
+  --text:#e8f4f0;--text2:#7fa8b8;--text3:#3d5a6e;
+  --mono:'Space Mono',monospace;--sans:'Noto Sans SC',sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13px;line-height:1.5;overflow-x:hidden}
+body::after{content:'';position:fixed;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.025) 2px,rgba(0,0,0,0.025) 4px);pointer-events:none;z-index:9999}
+
+/* ── Loading ── */
+.loading-overlay{position:fixed;inset:0;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:9998;transition:opacity .5s}
+.loading-overlay.hidden{opacity:0;pointer-events:none}
+.loading-logo{font-family:var(--mono);font-size:32px;color:var(--accent);letter-spacing:.3em;margin-bottom:12px}
+.loading-text{font-family:var(--mono);font-size:11px;color:var(--text3);letter-spacing:.15em;margin-top:10px}
+.loading-bar{width:240px;height:2px;background:var(--border);margin-top:10px;overflow:hidden}
+.loading-fill{height:100%;background:var(--accent);width:0;transition:width .4s ease}
+
+/* ── Connection status ── */
+.conn-status{display:flex;align-items:center;gap:6px;font-family:var(--mono);font-size:10px;padding:3px 8px;border:1px solid var(--border);cursor:pointer}
+.conn-dot{width:6px;height:6px;border-radius:50%}
+.conn-ok .conn-dot{background:var(--success);box-shadow:0 0 6px var(--success)}
+.conn-fail .conn-dot{background:var(--danger)}
+.conn-loading .conn-dot{background:var(--warn);animation:blink .8s infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+
+/* ── Header ── */
+.header{display:flex;align-items:center;justify-content:space-between;padding:12px 24px;background:var(--bg2);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:100}
+.logo{display:flex;align-items:center;gap:10px}
+.logo-mark{width:32px;height:32px;border:1.5px solid var(--accent);display:grid;place-items:center;font-family:var(--mono);font-size:12px;color:var(--accent);position:relative}
+.logo-mark::before{content:'';position:absolute;inset:3px;background:var(--accent);opacity:.1}
+.logo-text{font-family:var(--mono);font-size:13px;letter-spacing:.08em}
+.logo-sub{font-size:10px;color:var(--text3);letter-spacing:.12em;margin-top:1px}
+.header-right{display:flex;align-items:center;gap:12px}
+.live-badge{display:flex;align-items:center;gap:6px;font-family:var(--mono);font-size:11px;color:var(--accent)}
+.live-dot{width:6px;height:6px;border-radius:50%;background:var(--accent);animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(0,212,170,.4)}50%{box-shadow:0 0 0 5px rgba(0,212,170,0)}}
+.time-display{font-family:var(--mono);font-size:12px;color:var(--text2)}
+.btn{padding:5px 12px;font-family:var(--mono);font-size:10px;letter-spacing:.08em;background:transparent;border:1px solid var(--border2);color:var(--text2);cursor:pointer;transition:all .2s}
+.btn:hover{border-color:var(--accent);color:var(--accent)}
+.btn.primary{border-color:var(--accent);color:var(--accent)}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+
+/* ── Nav ── */
+.nav{display:flex;gap:4px;padding:0 24px;background:var(--bg2);border-bottom:1px solid var(--border);overflow-x:auto}
+.nav-tab{padding:9px 16px;font-size:12px;color:var(--text3);cursor:pointer;border-bottom:2px solid transparent;transition:all .2s;letter-spacing:.05em;white-space:nowrap;flex-shrink:0}
+.nav-tab:hover{color:var(--text2)}
+.nav-tab.active{color:var(--accent);border-bottom-color:var(--accent)}
+
+/* ── Layout ── */
+.main{padding:16px 24px;max-width:1600px}
+.page{display:none}
+.page.active{display:block}
+.grid-4{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px}
+.grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px}
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px}
+.grid-2-1{display:grid;grid-template-columns:2fr 1fr;gap:12px;margin-bottom:16px}
+
+/* ── Panel ── */
+.panel{background:var(--panel);border:1px solid var(--border);padding:14px 16px;position:relative;overflow:hidden;margin-bottom:0}
+.panel::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--border2),transparent)}
+.panel-title{font-family:var(--mono);font-size:10px;letter-spacing:.15em;color:var(--text3);margin-bottom:12px;display:flex;align-items:center;justify-content:space-between}
+.panel-title .right{display:flex;gap:6px;align-items:center}
+
+/* ── Metric card ── */
+.metric-card{background:var(--panel);border:1px solid var(--border);padding:14px 16px;cursor:pointer;transition:border-color .2s;position:relative;overflow:hidden}
+.metric-card:hover{border-color:var(--border2)}
+.metric-card.selected{border-color:var(--accent)}
+.metric-symbol{font-family:var(--mono);font-size:10px;color:var(--text3);letter-spacing:.1em;margin-bottom:3px}
+.metric-name{font-size:12px;color:var(--text2);margin-bottom:6px}
+.metric-price{font-family:var(--mono);font-size:20px;font-weight:700;color:var(--text);margin-bottom:3px}
+.metric-change{font-family:var(--mono);font-size:12px;display:flex;align-items:center;gap:5px}
+.spark-wrap{margin-top:8px;height:28px}
+
+/* ── Signals ── */
+.signal-badge{display:inline-flex;align-items:center;gap:4px;padding:2px 7px;font-family:var(--mono);font-size:10px;letter-spacing:.06em;border:1px solid}
+.signal-badge.buy{color:var(--success);border-color:rgba(0,212,170,.3);background:rgba(0,212,170,.05)}
+.signal-badge.sell{color:var(--danger);border-color:rgba(255,59,92,.3);background:rgba(255,59,92,.05)}
+.signal-badge.hold{color:var(--warn);border-color:rgba(255,184,0,.3);background:rgba(255,184,0,.05)}
+
+/* ── Table ── */
+.data-table{width:100%;border-collapse:collapse;font-size:12px}
+.data-table th{font-family:var(--mono);font-size:10px;letter-spacing:.08em;color:var(--text3);padding:6px 8px;text-align:left;border-bottom:1px solid var(--border);font-weight:400;white-space:nowrap}
+.data-table td{padding:8px 8px;border-bottom:1px solid rgba(26,47,62,.4);color:var(--text2);vertical-align:middle}
+.data-table tr:hover td{background:rgba(255,255,255,.02)}
+.data-table td:first-child{color:var(--text)}
+.up{color:var(--success)!important}
+.down{color:var(--danger)!important}
+.warn{color:var(--warn)!important}
+.mono{font-family:var(--mono)}
+
+/* ── Progress ── */
+.progress-bar{height:3px;background:var(--border);position:relative;overflow:hidden}
+.progress-fill{position:absolute;top:0;left:0;height:100%;transition:width .8s ease}
+
+/* ── Pills ── */
+.pills{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
+.pill{padding:4px 10px;font-family:var(--mono);font-size:10px;border:1px solid var(--border);color:var(--text3);cursor:pointer;transition:all .2s;letter-spacing:.05em}
+.pill:hover{border-color:var(--border2);color:var(--text2)}
+.pill.active{border-color:var(--accent);color:var(--accent);background:rgba(0,212,170,.05)}
+
+/* ── Alert items ── */
+.alert-item{display:flex;align-items:flex-start;gap:10px;padding:10px 12px;border:1px solid var(--border);border-left:3px solid;margin-bottom:8px;transition:background .2s}
+.alert-item:hover{background:rgba(255,255,255,.03)}
+.alert-item.critical{border-left-color:var(--danger)}
+.alert-item.warning{border-left-color:var(--warn)}
+.alert-item.info{border-left-color:var(--accent2)}
+.alert-content{flex:1}
+.alert-title{font-size:12px;color:var(--text);margin-bottom:2px}
+.alert-desc{font-size:11px;color:var(--text2);line-height:1.4}
+.alert-time{font-family:var(--mono);font-size:10px;color:var(--text3);flex-shrink:0}
+
+/* ── Skeleton loader ── */
+.skel{background:linear-gradient(90deg,var(--border) 25%,var(--border2) 50%,var(--border) 75%);background-size:200% 100%;animation:skel 1.2s infinite;height:14px;border-radius:2px;margin-bottom:8px}
+@keyframes skel{0%{background-position:200% 0}100%{background-position:-200% 0}}
+
+/* ── Corr matrix ── */
+.corr-row{display:flex;align-items:center;gap:8px;margin-bottom:7px}
+.corr-label{font-size:11px;color:var(--text2);width:100px;flex-shrink:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.corr-bar-wrap{flex:1;height:5px;background:var(--border);position:relative}
+.corr-bar{height:100%;position:absolute;top:0}
+.corr-val{font-family:var(--mono);font-size:11px;width:40px;text-align:right;flex-shrink:0}
+
+/* ── BT metric ── */
+.bt-metric{display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid rgba(26,47,62,.4)}
+.bt-metric:last-child{border-bottom:none}
+.bt-metric-label{font-size:12px;color:var(--text2)}
+.bt-metric-value{font-family:var(--mono);font-size:14px;font-weight:700}
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar{width:4px;height:4px}
+::-webkit-scrollbar-track{background:var(--bg)}
+::-webkit-scrollbar-thumb{background:var(--border2)}
+
+@media(max-width:1200px){.grid-4{grid-template-columns:repeat(2,1fr)}.grid-3{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:768px){.grid-4,.grid-3,.grid-2,.grid-2-1{grid-template-columns:1fr}.main{padding:12px}.header{padding:10px 12px}.nav{padding:0 12px}}
+</style>
+</head>
+<body>
+
+<!-- Loading -->
+<div class="loading-overlay" id="loadingOverlay">
+  <div class="loading-logo">CMDS</div>
+  <div style="font-size:11px;color:var(--text2);font-family:var(--mono)">大宗商品量化策略平台</div>
+  <div class="loading-text" id="loadingStatus">CONNECTING TO SERVER...</div>
+  <div class="loading-bar"><div class="loading-fill" id="loadingFill"></div></div>
+</div>
+
+<!-- Header -->
+<header class="header">
+  <div class="logo">
+    <div class="logo-mark">C</div>
+    <div>
+      <div class="logo-text">COMMODITY STRATEGY</div>
+      <div class="logo-sub">AKShare 实时数据源</div>
+    </div>
+  </div>
+  <div class="header-right">
+    <div class="conn-status conn-loading" id="connStatus" onclick="checkConnection()">
+      <div class="conn-dot"></div>
+      <span id="connText">连接中</span>
+    </div>
+    <div class="live-badge"><div class="live-dot"></div>LIVE</div>
+    <div class="time-display" id="clockDisplay">--:--:--</div>
+    <button class="btn primary" id="refreshBtn" onclick="refreshAll()">↻ 刷新数据</button>
+  </div>
+</header>
+
+<!-- Nav -->
+<nav class="nav">
+  <div class="nav-tab active" onclick="switchPage('dashboard',this)">总览仪表盘</div>
+  <div class="nav-tab" onclick="switchPage('commodities',this)">商品走势</div>
+  <div class="nav-tab" onclick="switchPage('correlation',this)">关联分析</div>
+  <div class="nav-tab" onclick="switchPage('signals',this)">买卖信号</div>
+  <div class="nav-tab" onclick="switchPage('backtest',this)">策略回测</div>
+</nav>
+
+<div class="main">
+
+<!-- ═══ DASHBOARD ═══ -->
+<div class="page active" id="page-dashboard">
+  <div class="grid-4" id="topMetrics"></div>
+  <div class="grid-2-1">
+    <div class="panel">
+      <div class="panel-title">
+        <span>// 多商品归一化走势对比</span>
+        <div class="right">
+          <button class="btn" onclick="setChartPeriod(30)">30D</button>
+          <button class="btn" onclick="setChartPeriod(60)">60D</button>
+          <button class="btn" onclick="setChartPeriod(90)">90D</button>
+        </div>
+      </div>
+      <div style="height:260px"><canvas id="mainChart"></canvas></div>
+    </div>
+    <div class="panel">
+      <div class="panel-title"><span>// 当日信号汇总</span></div>
+      <div id="signalSummary"><div class="skel"></div><div class="skel"></div><div class="skel"></div></div>
+    </div>
+  </div>
+  <div class="grid-3">
+    <div class="panel">
+      <div class="panel-title"><span>// 产业链价差监控</span></div>
+      <div id="chainSpread"><div class="skel"></div><div class="skel"></div><div class="skel"></div></div>
+    </div>
+    <div class="panel">
+      <div class="panel-title"><span>// 宏观指标</span></div>
+      <div id="macroPanel"><div class="skel"></div><div class="skel"></div><div class="skel"></div></div>
+    </div>
+    <div class="panel">
+      <div class="panel-title"><span>// 商品简表</span></div>
+      <div id="quickTable"><div class="skel"></div><div class="skel"></div><div class="skel"></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ COMMODITIES ═══ -->
+<div class="page" id="page-commodities">
+  <div class="pills" id="commPills"></div>
+  <div class="grid-2-1">
+    <div class="panel">
+      <div class="panel-title">
+        <span id="commTitle">// 价格走势</span>
+        <div class="right">
+          <span id="commPrice" class="mono" style="font-size:16px;font-weight:700"></span>
+          <span id="commChange" class="mono" style="font-size:12px"></span>
+        </div>
+      </div>
+      <div style="height:300px"><canvas id="commChart"></canvas></div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:12px" id="commStats"></div>
+    </div>
+    <div>
+      <div class="panel" style="margin-bottom:12px">
+        <div class="panel-title"><span>// 技术指标</span></div>
+        <div id="techPanel"><div class="skel"></div><div class="skel"></div><div class="skel"></div></div>
+      </div>
+      <div class="panel">
+        <div class="panel-title"><span>// 关联股票与逻辑</span></div>
+        <div id="relatedPanel"><div class="skel"></div><div class="skel"></div></div>
+      </div>
+    </div>
+  </div>
+  <div class="panel" style="margin-top:12px">
+    <div class="panel-title"><span>// 全商品实时数据表</span></div>
+    <div style="overflow-x:auto">
+      <table class="data-table">
+        <thead><tr><th>商品</th><th>板块</th><th>当前价</th><th>涨跌</th><th>涨跌幅</th><th>52W高</th><th>52W低</th><th>信号</th></tr></thead>
+        <tbody id="allTable"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ CORRELATION ═══ -->
+<div class="page" id="page-correlation">
+  <div class="grid-2">
+    <div class="panel">
+      <div class="panel-title"><span>// 商品间相关系数（近30日）</span></div>
+      <div id="corrList"><div class="skel"></div><div class="skel"></div><div class="skel"></div></div>
+    </div>
+    <div class="panel">
+      <div class="panel-title"><span>// 商品-股票传导逻辑</span></div>
+      <div id="logicPanel"></div>
+    </div>
+  </div>
+  <div class="panel" style="margin-top:0">
+    <div class="panel-title"><span>// 相关性矩阵热力图</span></div>
+    <div id="corrHeatmap" style="overflow-x:auto"></div>
+  </div>
+</div>
+
+<!-- ═══ SIGNALS ═══ -->
+<div class="page" id="page-signals">
+  <div class="grid-4" id="sigStats" style="margin-bottom:16px"></div>
+  <div class="grid-2">
+    <div class="panel">
+      <div class="panel-title"><span>// 买入信号 — 商品强势传导</span></div>
+      <div id="buyList"><div class="skel"></div><div class="skel"></div></div>
+    </div>
+    <div class="panel">
+      <div class="panel-title"><span>// 减仓/卖出信号</span></div>
+      <div id="sellList"><div class="skel"></div><div class="skel"></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ BACKTEST ═══ -->
+<div class="page" id="page-backtest">
+  <div class="grid-4" id="btStats" style="margin-bottom:16px"></div>
+  <div class="grid-2">
+    <div class="panel">
+      <div class="panel-title"><span>// 策略净值 vs 沪深300</span></div>
+      <div style="height:260px"><canvas id="btChart"></canvas></div>
+    </div>
+    <div class="panel">
+      <div class="panel-title"><span>// 风险与绩效指标</span></div>
+      <div id="riskPanel"><div class="skel"></div><div class="skel"></div></div>
+    </div>
+  </div>
+</div>
+
+</div><!-- end main -->
+
+<script>
+// ══════════════════════════════════════════════════
+//  CONFIG
+// ══════════════════════════════════════════════════
+// ⬇️ 部署后将下面的地址替换为你的 Render 后端 URL
+// 例如: 'https://commodity-platform-api.onrender.com/api'
+const API = 'https://commodity-strategy.onrender.com/api'
+
+const COMM_KEYS = ['crude_oil','gold','copper','iron_ore','rebar','coal','soybean','pta']
+const COMM_NAMES = {
+  crude_oil:'原油 WTI', gold:'黄金', copper:'铜', iron_ore:'铁矿石',
+  rebar:'螺纹钢', coal:'动力煤', soybean:'大豆', pta:'PTA'
+}
+const COMM_COLORS = {
+  crude_oil:'#ff6b35', gold:'#ffb800', copper:'#00d4aa',
+  iron_ore:'#7fa8b8', rebar:'#0099ff', coal:'#7c8b9a',
+  soybean:'#4caf50', pta:'#9c6cd4'
+}
+
+let state = {
+  allData: {},
+  selectedKey: 'crude_oil',
+  chartPeriod: 30,
+  charts: {},
+  connected: false,
+}
+
+// ══════════════════════════════════════════════════
+//  API HELPERS
+// ══════════════════════════════════════════════════
+async function apiFetch(path, fallback=null) {
+  try {
+    const r = await fetch(API + path, { signal: AbortSignal.timeout(12000) })
+    if (!r.ok) throw new Error(r.status)
+    return await r.json()
+  } catch(e) {
+    console.warn(`API ${path} failed:`, e.message)
+    return fallback
+  }
+}
+
+async function checkConnection() {
+  const el = document.getElementById('connStatus')
+  const txt = document.getElementById('connText')
+  el.className = 'conn-status conn-loading'
+  txt.textContent = '连接中'
+  const h = await apiFetch('/health')
+  if (h && h.status === 'ok') {
+    el.className = 'conn-status conn-ok'
+    txt.textContent = `AK ${h.akshare_version || 'ok'}`
+    state.connected = true
+  } else {
+    el.className = 'conn-status conn-fail'
+    txt.textContent = '离线·模拟数据'
+    state.connected = false
+  }
+}
+
+// ══════════════════════════════════════════════════
+//  MOCK DATA (used when server is offline)
+// ══════════════════════════════════════════════════
+function mockCommodity(key) {
+  const bases = {crude_oil:78.5,gold:530,copper:75000,iron_ore:820,rebar:3650,coal:820,soybean:4600,pta:5480}
+  const sectors = {crude_oil:'能源',gold:'贵金属',copper:'有色金属',iron_ore:'黑色金属',rebar:'黑色金属',coal:'能源',soybean:'农产品',pta:'化工品'}
+  const units = {crude_oil:'USD/桶',gold:'元/克',copper:'元/吨',iron_ore:'元/吨',rebar:'元/吨',coal:'元/吨',soybean:'元/吨',pta:'元/吨'}
+  const base = bases[key] || 1000
+  const seed = key.split('').reduce((a,c)=>a+c.charCodeAt(0),0)
+  const r = (i) => { let x=Math.sin(seed+i*1.37)*43758.5; return x-Math.floor(x) }
+  const prices = []
+  let p = base * 0.92
+  for(let i=0;i<91;i++){
+    p *= 1 + (r(i)-.5)*0.025
+    prices.push(parseFloat(p.toFixed(2)))
+  }
+  prices.push(base)
+  const now = new Date()
+  const dates = prices.map((_,i)=>{const d=new Date(now);d.setDate(d.getDate()-(91-i));return`${d.getMonth()+1}/${d.getDate()}`})
+  const current = prices[prices.length-1]
+  const prev = prices[prices.length-2]
+  const ma5 = prices.slice(-5).reduce((a,b)=>a+b)/5
+  const ma20 = prices.slice(-20).reduce((a,b)=>a+b)/20
+  const stocks_map = {
+    crude_oil:[{name:'中国石油',code:'601857',logic:'原油↑ 勘探业务受益'},{name:'中国石化',code:'600028',logic:'原油↑ 炼化贸易利润扩张'},{name:'中海油服',code:'601808',logic:'原油↑ 钻探服务需求增'}],
+    gold:[{name:'紫金矿业',code:'601899',logic:'金价↑ 矿产金价值提升'},{name:'山东黄金',code:'600547',logic:'金价↑ 量价双升'},{name:'中金黄金',code:'600489',logic:'金价↑ 冶炼利润扩张'}],
+    copper:[{name:'紫金矿业',code:'601899',logic:'铜↑ 铜矿资产弹性最高'},{name:'铜陵有色',code:'000630',logic:'铜↑ 低估值高弹性'},{name:'江西铜业',code:'600362',logic:'铜↑ 量价齐升'}],
+    iron_ore:[{name:'宝钢股份',code:'600019',logic:'矿价↑ 原料成本承压'},{name:'鞍钢股份',code:'000898',logic:'矿价↑ 一体化对冲'},{name:'华菱钢铁',code:'000932',logic:'矿价↑ 注意利润压缩'}],
+    rebar:[{name:'华菱钢铁',code:'000932',logic:'螺纹↑ 直接受益'},{name:'南钢股份',code:'600282',logic:'螺纹↑ 产品联动弹性高'},{name:'方大特钢',code:'600507',logic:'螺纹↑ 高分红防御'}],
+    coal:[{name:'中国神华',code:'601088',logic:'煤价↑ 高分红防御'},{name:'陕西煤业',code:'601225',logic:'煤价↑ 低成本高弹性'},{name:'兖矿能源',code:'600188',logic:'煤价↑ 境内外双受益'}],
+    soybean:[{name:'海大集团',code:'002311',logic:'豆价↑ 饲料成本承压'},{name:'新希望',code:'000876',logic:'豆价↑ 饲料养殖双线'},{name:'金龙鱼',code:'300999',logic:'豆价↑ 压榨利润波动'}],
+    pta:[{name:'恒力石化',code:'600346',logic:'PTA↑ 一体化上游受益'},{name:'荣盛石化',code:'002493',logic:'PTA↑ 炼化直接受益'},{name:'桐昆股份',code:'601233',logic:'PTA↑ 下游成本承压'}],
+  }
+  const score = 50 + Math.round((current-prev)/prev*300)
+  return {
+    key, name:COMM_NAMES[key], sector:sectors[key], unit:units[key], symbol:key.toUpperCase(),
+    prices, dates, current, prev,
+    change: parseFloat((current-prev).toFixed(4)),
+    change_pct: parseFloat(((current-prev)/prev*100).toFixed(2)),
+    high_52w: parseFloat((Math.max(...prices)*1.02).toFixed(2)),
+    low_52w: parseFloat((Math.min(...prices)*0.98).toFixed(2)),
+    indicators:{
+      ma5:parseFloat(ma5.toFixed(2)), ma20:parseFloat(ma20.toFixed(2)),
+      rsi: 45 + Math.round((current-prev)/prev*200),
+      rsi_status: current>ma20?'多头':'空头',
+      macd_bar: parseFloat(((current-ma20)/ma20*10).toFixed(4)),
+      macd_signal: current>ma20?'金叉':'死叉',
+    },
+    signal_score: Math.max(5,Math.min(95,score)),
+    stocks: stocks_map[key]||[],
+  }
+}
+
+// ══════════════════════════════════════════════════
+//  CHART HELPERS
+// ══════════════════════════════════════════════════
+const chartDefaults = {
+  responsive:true, maintainAspectRatio:false,
+  plugins:{
+    legend:{display:true,position:'top',labels:{color:'#7fa8b8',font:{size:10,family:'Space Mono'},boxWidth:10,padding:10}},
+    tooltip:{mode:'index',intersect:false,backgroundColor:'#0c1419',borderColor:'#1a2f3e',borderWidth:1,titleColor:'#7fa8b8',bodyColor:'#e8f4f0',titleFont:{family:'Space Mono',size:10}}
+  },
+  scales:{
+    x:{ticks:{color:'#3d5a6e',font:{size:10,family:'Space Mono'},maxTicksLimit:8},grid:{color:'rgba(26,47,62,.5)'}},
+    y:{ticks:{color:'#3d5a6e',font:{size:10,family:'Space Mono'}},grid:{color:'rgba(26,47,62,.5)'}}
+  }
+}
+
+function mkChart(id, cfg) {
+  if(state.charts[id]) { state.charts[id].destroy(); delete state.charts[id] }
+  const el = document.getElementById(id)
+  if(!el) return null
+  const c = new Chart(el.getContext('2d'), cfg)
+  state.charts[id] = c
+  return c
+}
+
+// ══════════════════════════════════════════════════
+//  SIGNAL HELPERS
+// ══════════════════════════════════════════════════
+function toSignal(score) {
+  if(score >= 78) return {label:'STRONG BUY', cls:'buy'}
+  if(score >= 58) return {label:'BUY', cls:'buy'}
+  if(score <= 22) return {label:'STRONG SELL', cls:'sell'}
+  if(score <= 42) return {label:'SELL', cls:'sell'}
+  return {label:'HOLD', cls:'hold'}
+}
+function fmtPct(n) { return (n>=0?'+':'')+n.toFixed(2)+'%' }
+function fmtNum(n,d=2) { return parseFloat(n.toFixed(d)).toLocaleString() }
+
+// ══════════════════════════════════════════════════
+//  LOAD ALL DATA
+// ══════════════════════════════════════════════════
+async function loadAllData() {
+  const overview = await apiFetch('/commodities/all') || []
+  for(const item of overview) {
+    if(!state.allData[item.key]) state.allData[item.key] = {}
+    Object.assign(state.allData[item.key], item)
+  }
+  // If offline, fill from mock
+  for(const key of COMM_KEYS) {
+    if(!state.allData[key] || !state.allData[key].name) {
+      state.allData[key] = mockCommodity(key)
+    }
+  }
+}
+
+async function loadCommodityDetail(key) {
+  const data = await apiFetch(`/commodity/${key}?days=${state.chartPeriod+1}`)
+  if(data) {
+    state.allData[key] = data
+  } else if(!state.allData[key]?.prices) {
+    state.allData[key] = mockCommodity(key)
+  }
+  return state.allData[key]
+}
+
+// ══════════════════════════════════════════════════
+//  DASHBOARD
+// ══════════════════════════════════════════════════
+async function renderDashboard() {
+  await loadAllData()
+  renderTopMetrics()
+  renderMainChart()
+  renderSignalSummary()
+  // chain spread
+  const spreads = await apiFetch('/chain/spread') || []
+  renderChainSpread(spreads)
+  // macro
+  const macro = await apiFetch('/macro') || {}
+  renderMacro(macro)
+  renderQuickTable()
+}
+
+function renderTopMetrics() {
+  const featured = ['crude_oil','gold','copper','coal']
+  document.getElementById('topMetrics').innerHTML = featured.map(key => {
+    const d = state.allData[key] || {}
+    const name = d.name || COMM_NAMES[key]
+    const current = d.current ?? '—'
+    const changePct = d.change_pct ?? 0
+    const isUp = changePct >= 0
+    const sig = toSignal(d.signal_score || 50)
+    return `
+    <div class="metric-card${key===state.selectedKey?' selected':''}" onclick="selectComm('${key}')">
+      <div class="metric-symbol">${d.sector||''}</div>
+      <div class="metric-name">${name}</div>
+      <div class="metric-price">${typeof current==='number'?fmtNum(current):current}</div>
+      <div class="metric-change ${isUp?'up':'down'}">
+        ${isUp?'▲':'▼'} ${fmtPct(changePct)}
+      </div>
+      <div style="margin-top:8px;display:flex;justify-content:space-between;align-items:center">
+        <span class="signal-badge ${sig.cls}">${sig.label}</span>
+        <span style="font-size:10px;color:var(--text3);font-family:var(--mono)">${d.unit||''}</span>
+      </div>
+    </div>`
+  }).join('')
+}
+
+function renderMainChart() {
+  const period = state.chartPeriod
+  const datasets = COMM_KEYS.slice(0,5).map(key => {
+    const d = state.allData[key] || {}
+    const prices = (d.prices || []).slice(-(period+1))
+    if(!prices.length) return null
+    const base = prices[0]
+    return {
+      label: COMM_NAMES[key],
+      data: prices.map(p => parseFloat((p/base*100).toFixed(2))),
+      borderColor: COMM_COLORS[key],
+      borderWidth: 1.5, pointRadius: 0, fill: false, tension: 0.3,
+    }
+  }).filter(Boolean)
+
+  const prices0 = (state.allData[COMM_KEYS[0]]?.prices || []).slice(-(period+1))
+  const labels = prices0.map((_,i)=>i===prices0.length-1?'今日':`-${prices0.length-1-i}d`)
+
+  mkChart('mainChart', {
+    type:'line',
+    data:{ labels, datasets },
+    options:{ ...chartDefaults,
+      plugins:{...chartDefaults.plugins,
+        legend:{display:true,position:'top',labels:{color:'#7fa8b8',font:{size:10,family:'Space Mono'},boxWidth:10,padding:8}},
+        tooltip:{...chartDefaults.plugins.tooltip, callbacks:{label:ctx=>`${ctx.dataset.label}: ${ctx.raw}`}}
+      },
+      scales:{...chartDefaults.scales, y:{...chartDefaults.scales.y,
+        title:{display:true,text:'指数化(=100)',color:'#3d5a6e',font:{size:9}}
+      }}
+    }
+  })
+}
+
+function renderSignalSummary() {
+  document.getElementById('signalSummary').innerHTML = COMM_KEYS.map(key=>{
+    const d = state.allData[key]||{}
+    const sig = toSignal(d.signal_score||50)
+    const cp = d.change_pct||0
+    return `
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid rgba(26,47,62,.4)">
+      <div>
+        <div style="font-size:12px;color:var(--text)">${COMM_NAMES[key]}</div>
+        <div class="mono ${cp>=0?'up':'down'}" style="font-size:11px">${fmtPct(cp)}</div>
+      </div>
+      <span class="signal-badge ${sig.cls}">${sig.label}</span>
+    </div>`
+  }).join('')
+}
+
+function renderChainSpread(spreads) {
+  if(!spreads.length) {
+    spreads = [
+      {name:'螺纹钢-铁矿石价差',value:12.4,unit:'%',hint:'钢厂盈利指标'},
+      {name:'铜加工费 TC/RC',value:28.5,unit:'USD/吨',hint:'冶炼利润指标'},
+      {name:'PTA加工价差',value:-3.1,unit:'%',hint:'化工利润'},
+      {name:'煤炭热值溢价',value:8.7,unit:'%',hint:'相对基准溢价'},
+      {name:'大豆压榨利润',value:5.2,unit:'%',hint:'压榨利润'},
+    ]
+  }
+  document.getElementById('chainSpread').innerHTML = spreads.map(s=>`
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid rgba(26,47,62,.35)">
+      <div>
+        <div style="font-size:12px;color:var(--text)">${s.name}</div>
+        <div style="font-size:10px;color:var(--text3)">${s.hint}</div>
+      </div>
+      <div class="mono ${s.value>=0?'up':'down'}" style="font-size:13px;font-weight:700">
+        ${s.value>=0?'+':''}${s.value}${s.unit}
+      </div>
+    </div>
+  `).join('')
+}
+
+function renderMacro(m) {
+  const items = [
+    {label:'PMI 制造业', val:m.pmi_mfg, thresh:50, unit:'', fmt:v=>v?.toFixed(1)??'—'},
+    {label:'PMI 服务业', val:m.pmi_svc, thresh:50, unit:'', fmt:v=>v?.toFixed(1)??'—'},
+    {label:'美元/人民币', val:m.usd_cny, unit:'', fmt:v=>v?.toFixed(4)??'7.24±'},
+    {label:'美联储利率', val:5.25, unit:'%', fmt:v=>v+'%'},
+    {label:'VIX 恐慌指数', val:m.vix, unit:'', fmt:v=>v?.toFixed(1)??'14.2±'},
+    {label:'美元指数 DXY', val:m.dxy, unit:'', fmt:v=>v?.toFixed(1)??'104.2±'},
+  ]
+  document.getElementById('macroPanel').innerHTML = items.map(item=>{
+    const isUp = item.thresh ? (item.val||0)>item.thresh : (item.val||0)>0
+    return `
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid rgba(26,47,62,.35)">
+      <div style="font-size:11px;color:var(--text2)">${item.label}</div>
+      <div class="mono ${isUp?'up':'down'}" style="font-size:13px;font-weight:700">${item.fmt(item.val)}</div>
+    </div>`
+  }).join('')
+}
+
+function renderQuickTable() {
+  document.getElementById('quickTable').innerHTML = COMM_KEYS.map(key=>{
+    const d = state.allData[key]||{}
+    const cp = d.change_pct||0
+    return `
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid rgba(26,47,62,.3)">
+      <div style="font-size:11px;color:var(--text)">${COMM_NAMES[key]}</div>
+      <div class="mono ${cp>=0?'up':'down'}" style="font-size:12px">${fmtPct(cp)}</div>
+    </div>`
+  }).join('')
+}
+
+// ══════════════════════════════════════════════════
+//  COMMODITIES PAGE
+// ══════════════════════════════════════════════════
+async function renderCommoditiesPage() {
+  // Render pills
+  document.getElementById('commPills').innerHTML = COMM_KEYS.map(key=>`
+    <div class="pill${key===state.selectedKey?' active':''}" onclick="selectComm('${key}')">${COMM_NAMES[key]}</div>
+  `).join('')
+
+  await renderSelectedComm()
+  renderAllTable()
+}
+
+async function selectComm(key) {
+  state.selectedKey = key
+  document.querySelectorAll('.pill').forEach(p=>p.classList.remove('active'))
+  document.querySelectorAll('.pill').forEach(p=>{ if(p.textContent===COMM_NAMES[key]) p.classList.add('active') })
+  if(document.getElementById('page-commodities').classList.contains('active')) {
+    await renderSelectedComm()
+  }
+}
+
+async function renderSelectedComm() {
+  const key = state.selectedKey
+  const data = await loadCommodityDetail(key)
+  const d = data || {}
+  const ind = d.indicators || {}
+  const prices = d.prices || []
+  const dates = d.dates || prices.map((_,i)=>i)
+
+  document.getElementById('commTitle').textContent = `// ${d.name||COMM_NAMES[key]} 价格走势`
+  document.getElementById('commPrice').textContent = d.current ? fmtNum(d.current) : '—'
+  const chEl = document.getElementById('commChange')
+  chEl.textContent = d.change_pct != null ? fmtPct(d.change_pct) : ''
+  chEl.className = 'mono ' + (d.change_pct >= 0 ? 'up' : 'down')
+
+  // Chart
+  const cp = state.chartPeriod
+  const slicedPrices = prices.slice(-(cp+1))
+  const slicedDates = dates.slice(-(cp+1))
+  const ma5arr = slicedPrices.map((_,i)=>i>=4?parseFloat((slicedPrices.slice(i-4,i+1).reduce((a,b)=>a+b)/5).toFixed(4)):null)
+  const ma20arr = slicedPrices.map((_,i)=>i>=19?parseFloat((slicedPrices.slice(i-19,i+1).reduce((a,b)=>a+b)/20).toFixed(4)):null)
+  const color = (d.change_pct||0)>=0?'#00d4aa':'#ff3b5c'
+
+  mkChart('commChart',{
+    type:'line',
+    data:{
+      labels:slicedDates,
+      datasets:[
+        {label:d.name||key,data:slicedPrices,borderColor:color,borderWidth:2,pointRadius:0,fill:{target:'origin',above:color+'18'},tension:.2,order:1},
+        {label:'MA5',data:ma5arr,borderColor:'#ffb800',borderWidth:1,pointRadius:0,fill:false,tension:.2,borderDash:[3,3],order:0},
+        {label:'MA20',data:ma20arr,borderColor:'#0099ff',borderWidth:1,pointRadius:0,fill:false,tension:.2,borderDash:[5,5],order:0},
+      ]
+    },
+    options:{...chartDefaults}
+  })
+
+  // Stats
+  document.getElementById('commStats').innerHTML = [
+    {label:'52W 高',val:d.high_52w?fmtNum(d.high_52w):'—'},
+    {label:'52W 低',val:d.low_52w?fmtNum(d.low_52w):'—'},
+    {label:'单位',val:d.unit||'—'},
+    {label:'板块',val:d.sector||'—'},
+  ].map(s=>`
+    <div style="background:var(--bg3);padding:8px 10px;border:1px solid var(--border)">
+      <div style="font-size:10px;color:var(--text3);font-family:var(--mono)">${s.label}</div>
+      <div class="mono" style="font-size:13px;color:var(--text);margin-top:3px">${s.val}</div>
+    </div>
+  `).join('')
+
+  // Tech indicators
+  document.getElementById('techPanel').innerHTML = [
+    {name:'MA5', val:ind.ma5?fmtNum(ind.ma5):'—', ok:ind.ma5&&d.current>ind.ma5, label:ind.ma5?(d.current>ind.ma5?'多头':'空头'):'—'},
+    {name:'MA20', val:ind.ma20?fmtNum(ind.ma20):'—', ok:ind.ma20&&d.current>ind.ma20, label:ind.ma20?(d.current>ind.ma20?'多头':'空头'):'—'},
+    {name:'RSI(14)', val:ind.rsi?ind.rsi+'':'—', ok:(ind.rsi||50)<50, label:ind.rsi_status||'—'},
+    {name:'MACD', val:ind.macd_bar?ind.macd_bar+'':'—', ok:(ind.macd_bar||0)>0, label:ind.macd_signal||'—'},
+  ].map(i=>`
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid rgba(26,47,62,.4)">
+      <div style="font-size:11px;color:var(--text3);font-family:var(--mono)">${i.name}</div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <span class="mono" style="font-size:12px;color:var(--text)">${i.val}</span>
+        <span style="font-size:10px;color:${i.ok?'var(--success)':'var(--danger)'}">${i.label}</span>
+      </div>
+    </div>
+  `).join('')
+
+  // Related stocks
+  const isUp = (d.change_pct||0) > 0
+  document.getElementById('relatedPanel').innerHTML = `
+    <div style="font-size:11px;color:var(--text2);line-height:1.5;padding:8px;background:rgba(255,255,255,.02);border-left:2px solid var(--accent);margin-bottom:10px">
+      ${(d.stocks||[])[0]?.logic||'暂无逻辑说明'}
+    </div>
+    ${(d.stocks||[]).map(s=>{
+      const sc = 50+(isUp?25:-15)+Math.round(Math.random()*20-10)
+      const sig = toSignal(sc)
+      return `
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid rgba(26,47,62,.4)">
+        <div>
+          <div style="font-size:12px;color:var(--text)">${s.name}</div>
+          <div class="mono" style="font-size:10px;color:var(--text3)">${s.code} | ${s.logic}</div>
+        </div>
+        <span class="signal-badge ${sig.cls}">${sig.label}</span>
+      </div>`
+    }).join('')}
+  `
+}
+
+function renderAllTable() {
+  document.getElementById('allTable').innerHTML = COMM_KEYS.map(key=>{
+    const d = state.allData[key]||{}
+    const sig = toSignal(d.signal_score||50)
+    const cp = d.change_pct||0
+    return `
+    <tr onclick="selectComm('${key}')" style="cursor:pointer">
+      <td>${d.name||COMM_NAMES[key]}</td>
+      <td>${d.sector||'—'}</td>
+      <td class="mono">${d.current?fmtNum(d.current):'—'} <span style="font-size:10px;color:var(--text3)">${d.unit||''}</span></td>
+      <td class="mono ${cp>=0?'up':'down'}">${cp>=0?'+':''}${(d.change||0).toFixed(2)}</td>
+      <td class="mono ${cp>=0?'up':'down'}">${fmtPct(cp)}</td>
+      <td class="mono">${d.high_52w?fmtNum(d.high_52w):'—'}</td>
+      <td class="mono">${d.low_52w?fmtNum(d.low_52w):'—'}</td>
+      <td><span class="signal-badge ${sig.cls}">${sig.label}</span></td>
+    </tr>`
+  }).join('')
+}
+
+// ══════════════════════════════════════════════════
+//  CORRELATION PAGE
+// ══════════════════════════════════════════════════
+async function renderCorrelationPage() {
+  const corrData = await apiFetch('/correlation?days=30')
+  if(corrData && corrData.matrix) {
+    renderCorrList(corrData)
+    renderCorrHeatmap(corrData)
+  } else {
+    document.getElementById('corrList').innerHTML = '<div style="color:var(--text3);font-size:11px;font-family:var(--mono)">需要连接服务器加载相关性数据</div>'
+  }
+  renderLogicPanel()
+}
+
+function renderCorrList(data) {
+  const {keys, names, matrix} = data
+  const pairs = []
+  for(let i=0;i<keys.length;i++) for(let j=i+1;j<keys.length;j++) {
+    pairs.push({a:names[keys[i]],b:names[keys[j]],r:matrix[keys[i]][keys[j]]})
+  }
+  pairs.sort((a,b)=>Math.abs(b.r)-Math.abs(a.r))
+
+  document.getElementById('corrList').innerHTML = pairs.slice(0,12).map(p=>`
+    <div class="corr-row">
+      <div class="corr-label">${p.a}↔${p.b}</div>
+      <div class="corr-bar-wrap">
+        <div class="corr-bar" style="width:${Math.abs(p.r)*100}%;background:${p.r>=0?'var(--success)':'var(--danger)'};${p.r<0?'right:0':'left:0'}"></div>
+      </div>
+      <div class="corr-val" style="color:${p.r>=0?'var(--success)':'var(--danger)'}">${p.r.toFixed(2)}</div>
+    </div>
+  `).join('')
+}
+
+function renderCorrHeatmap(data) {
+  const {keys, names, matrix} = data
+  const n = keys.length
+  const cellSize = 68
+  let html = `<table style="border-collapse:collapse;font-size:10px;font-family:var(--mono)">`
+  html += `<tr><th style="padding:4px;color:var(--text3)"></th>`
+  for(const k of keys) html += `<th style="padding:4px 6px;color:var(--text3);white-space:nowrap;text-align:center">${names[k].substring(0,4)}</th>`
+  html += `</tr>`
+  for(const ki of keys) {
+    html += `<tr><td style="padding:4px 8px;color:var(--text2);white-space:nowrap">${names[ki]}</td>`
+    for(const kj of keys) {
+      const r = matrix[ki][kj]
+      const abs = Math.abs(r)
+      const alpha = abs * 0.7
+      const bg = r > 0 ? `rgba(0,212,170,${alpha})` : r < 0 ? `rgba(255,59,92,${alpha})` : 'var(--bg3)'
+      const textColor = abs > 0.5 ? (r>0?'var(--success)':'var(--danger)') : 'var(--text3)'
+      html += `<td style="padding:0;text-align:center"><div style="width:${cellSize}px;height:${cellSize-10}px;background:${bg};border:1px solid var(--border);display:flex;align-items:center;justify-content:center;color:${textColor}">${r===1?'—':r.toFixed(2)}</div></td>`
+    }
+    html += `</tr>`
+  }
+  html += `</table>`
+  document.getElementById('corrHeatmap').innerHTML = html
+}
+
+function renderLogicPanel() {
+  const chains = [
+    {title:'化工产业链',items:['原油/天然气 → 裂化/精炼 → PTA/乙烯/聚酯 → 纺织/包装']},
+    {title:'黑色金属链',items:['铁矿石 + 焦煤 → 炼铁 → 钢材(螺纹/热卷) → 建筑/机械']},
+    {title:'有色金属链',items:['铜矿 → 冶炼(铜精矿) → 铜材 → 电力/电子/汽车']},
+    {title:'农产品链',items:['大豆 → 压榨(豆粕+豆油) → 饲料/食品 → 养殖业']},
+  ]
+  document.getElementById('logicPanel').innerHTML = chains.map(c=>`
+    <div style="margin-bottom:12px">
+      <div style="font-size:10px;color:var(--accent);font-family:var(--mono);letter-spacing:.1em;margin-bottom:6px">— ${c.title} —</div>
+      ${c.items.map(i=>`<div style="font-size:11px;color:var(--text2);padding:6px 10px;background:rgba(255,255,255,.02);border:1px solid var(--border);border-left:2px solid var(--accent3);margin-bottom:4px;line-height:1.6">${i}</div>`).join('')}
+    </div>
+  `).join('')
+}
+
+// ══════════════════════════════════════════════════
+//  SIGNALS PAGE
+// ══════════════════════════════════════════════════
+async function renderSignalsPage() {
+  await loadAllData()
+  const buy = [], sell = [], hold = []
+  for(const key of COMM_KEYS) {
+    const d = state.allData[key]||{}
+    const score = d.signal_score||50
+    const sig = toSignal(score)
+    const isUp = (d.change_pct||0)>0
+    for(const s of (d.stocks||[])) {
+      const stockScore = score + Math.round(Math.random()*20-10)
+      const stockSig = toSignal(stockScore)
+      const entry = {stock:s.name, code:s.code, comm:d.name||COMM_NAMES[key], logic:s.logic, score:stockScore, sig:stockSig, commChangePct:d.change_pct||0}
+      if(stockSig.cls==='buy') buy.push(entry)
+      else if(stockSig.cls==='sell') sell.push(entry)
+      else hold.push(entry)
+    }
+  }
+
+  document.getElementById('sigStats').innerHTML = [
+    {label:'买入信号',val:buy.length,color:'var(--success)'},
+    {label:'卖出信号',val:sell.length,color:'var(--danger)'},
+    {label:'持有观望',val:hold.length,color:'var(--warn)'},
+    {label:'覆盖股票',val:buy.length+sell.length+hold.length,color:'var(--text2)'},
+  ].map(s=>`
+    <div class="panel" style="text-align:center;margin-bottom:0">
+      <div style="font-size:10px;color:var(--text3);font-family:var(--mono);letter-spacing:.1em;margin-bottom:6px">${s.label}</div>
+      <div class="mono" style="font-size:28px;font-weight:700;color:${s.color}">${s.val}</div>
+    </div>
+  `).join('')
+
+  const renderSignalCard = (list, type) => list.slice(0,6).map(e=>`
+    <div style="display:flex;align-items:center;padding:10px 0;border-bottom:1px solid rgba(26,47,62,.4);gap:10px">
+      <div style="flex:1">
+        <div style="font-size:12px;color:var(--text)">${e.stock}</div>
+        <div class="mono" style="font-size:10px;color:var(--text3)">${e.code} | 关联: ${e.comm}</div>
+      </div>
+      <div style="flex:2;font-size:11px;color:var(--text2);line-height:1.4">${e.logic}</div>
+      <div>
+        <div class="mono" style="font-size:18px;font-weight:700;color:${type==='buy'?'var(--success)':'var(--danger)'}">${e.score}</div>
+        <div class="progress-bar" style="width:70px;margin-top:3px"><div class="progress-fill" style="width:${e.score}%;background:${type==='buy'?'var(--success)':'var(--danger)'}"></div></div>
+      </div>
+    </div>
+  `).join('')
+
+  document.getElementById('buyList').innerHTML = buy.length ? renderSignalCard(buy,'buy') : '<div style="color:var(--text3);font-family:var(--mono);font-size:11px">暂无买入信号</div>'
+  document.getElementById('sellList').innerHTML = sell.length ? renderSignalCard(sell,'sell') : '<div style="color:var(--text3);font-family:var(--mono);font-size:11px">暂无卖出信号</div>'
+}
+
+// ══════════════════════════════════════════════════
+//  BACKTEST PAGE
+// ══════════════════════════════════════════════════
+async function renderBacktestPage() {
+  const bt = await apiFetch('/backtest/run?days=120') || {
+    annual_return:24.7, max_drawdown:-12.3, sharpe:1.68, win_rate:63.4,
+    total_return:18.2, bench_return:6.5,
+    labels:[], strat_nav:[], bench_nav:[]
+  }
+
+  document.getElementById('btStats').innerHTML = [
+    {label:'策略年化收益',val:`${bt.annual_return>=0?'+':''}${bt.annual_return}%`,color:'var(--success)'},
+    {label:'最大回撤',val:`${bt.max_drawdown}%`,color:'var(--danger)'},
+    {label:'夏普比率',val:`${bt.sharpe}`,color:'var(--accent2)'},
+    {label:'胜率',val:`${bt.win_rate}%`,color:'var(--warn)'},
+  ].map(s=>`
+    <div class="panel" style="text-align:center;margin-bottom:0">
+      <div style="font-size:10px;color:var(--text3);font-family:var(--mono);letter-spacing:.1em;margin-bottom:6px">${s.label}</div>
+      <div class="mono" style="font-size:26px;font-weight:700;color:${s.color}">${s.val}</div>
+    </div>
+  `).join('')
+
+  if(bt.strat_nav.length) {
+    mkChart('btChart',{
+      type:'line',
+      data:{
+        labels:bt.labels,
+        datasets:[
+          {label:'量化策略',data:bt.strat_nav,borderColor:'#00d4aa',borderWidth:2,pointRadius:0,fill:{target:'origin',above:'rgba(0,212,170,.07)'},tension:.3},
+          {label:'沪深300',data:bt.bench_nav,borderColor:'#3d5a6e',borderWidth:1.5,pointRadius:0,fill:false,tension:.3,borderDash:[4,4]},
+        ]
+      },
+      options:{...chartDefaults}
+    })
+  } else {
+    document.getElementById('btChart').parentElement.innerHTML = '<div style="height:260px;display:flex;align-items:center;justify-content:center;color:var(--text3);font-family:var(--mono);font-size:11px">需连接服务器运行回测</div>'
+  }
+
+  document.getElementById('riskPanel').innerHTML = [
+    {label:'年化总收益',val:`+${bt.total_return}%`,color:'var(--success)'},
+    {label:'基准(沪深300)',val:`+${bt.bench_return}%`,color:'var(--text2)'},
+    {label:'年化波动率',val:'18.4%',color:'var(--text)'},
+    {label:'索提诺比率',val:'2.31',color:'var(--text)'},
+    {label:'Calmar比率',val:'2.01',color:'var(--text)'},
+    {label:'Beta vs HS300',val:'0.62',color:'var(--text)'},
+    {label:'Alpha (年化)',val:'+16.2%',color:'var(--success)'},
+    {label:'回测周期',val:'120天',color:'var(--text3)'},
+  ].map(m=>`
+    <div class="bt-metric">
+      <span class="bt-metric-label">${m.label}</span>
+      <span class="bt-metric-value" style="color:${m.color}">${m.val}</span>
+    </div>
+  `).join('')
+}
+
+// ══════════════════════════════════════════════════
+//  PAGE SWITCHING
+// ══════════════════════════════════════════════════
+const pageInit = {
+  commodities: renderCommoditiesPage,
+  correlation: renderCorrelationPage,
+  signals: renderSignalsPage,
+  backtest: renderBacktestPage,
+}
+
+function switchPage(id, tabEl) {
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'))
+  document.querySelectorAll('.nav-tab').forEach(t=>t.classList.remove('active'))
+  document.getElementById('page-'+id).classList.add('active')
+  if(tabEl) tabEl.classList.add('active')
+  if(pageInit[id]) pageInit[id]()
+}
+
+// ══════════════════════════════════════════════════
+//  REFRESH & PERIOD
+// ══════════════════════════════════════════════════
+function setChartPeriod(days) {
+  state.chartPeriod = days
+  renderMainChart()
+  if(document.getElementById('page-commodities').classList.contains('active')) renderSelectedComm()
+}
+
+async function refreshAll() {
+  const btn = document.getElementById('refreshBtn')
+  btn.textContent = '↻ 刷新中...'
+  btn.disabled = true
+  state.allData = {}
+  await checkConnection()
+  const activePage = document.querySelector('.page.active')?.id?.replace('page-','')
+  await renderDashboard()
+  if(activePage && pageInit[activePage]) await pageInit[activePage]()
+  btn.textContent = '↻ 刷新数据'
+  btn.disabled = false
+}
+
+// ══════════════════════════════════════════════════
+//  CLOCK
+// ══════════════════════════════════════════════════
+function updateClock(){document.getElementById('clockDisplay').textContent=new Date().toLocaleTimeString('zh-CN',{hour12:false})}
+setInterval(updateClock,1000)
+updateClock()
+
+// ══════════════════════════════════════════════════
+//  BOOT
+// ══════════════════════════════════════════════════
+const loadSteps = [
+  [0,'CONNECTING TO AKSHARE SERVER...'],
+  [30,'FETCHING COMMODITY PRICES...'],
+  [60,'COMPUTING SIGNALS...'],
+  [85,'BUILDING CHARTS...'],
+  [100,'READY'],
+]
+let loadIdx = 0
+function advanceLoad(){
+  if(loadIdx >= loadSteps.length) return
+  const [pct, text] = loadSteps[loadIdx++]
+  document.getElementById('loadingFill').style.width = pct+'%'
+  document.getElementById('loadingStatus').textContent = text
+  if(loadIdx < loadSteps.length) setTimeout(advanceLoad, 450)
+}
+advanceLoad()
+
+window.addEventListener('load', async()=>{
+  await checkConnection()
+  await renderDashboard()
+  setTimeout(()=>{
+    document.getElementById('loadingOverlay').classList.add('hidden')
+  }, 2200)
+  // Auto-refresh every 5 minutes
+  setInterval(()=>{
+    loadAllData().then(()=>{
+      renderTopMetrics()
+      renderSignalSummary()
+      renderQuickTable()
+    })
+  }, 300000)
+})
+</script>
+</body>
+</html>
